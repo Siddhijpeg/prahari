@@ -1,10 +1,10 @@
 # PRAHARI — Predictive Cash-Out Intelligence Framework (SIH26184)
 
 ## Structure
-- `frontend/` — UI prototype (index.html = latest, archive/ = earlier iterations)
-- `data/` — synthetic dataset generator + generated CSVs
-- `ml/` — prediction logic, starting with the baseline evaluator
-- `backend/` — FastAPI service (not built yet)
+- `frontend` — UI prototype (index.html = latest, archive/ = earlier iterations)
+- `data` — synthetic dataset generator + generated CSVs
+- `ml` — prediction logic, starting with the baseline evaluator
+- `backend` — FastAPI service (not built yet)
 
 ## Data
 Regenerate the synthetic dataset anytime:
