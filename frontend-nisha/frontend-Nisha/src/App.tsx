@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Login from './screens/Login';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import CommandCenter from './screens/CommandCenter';
@@ -15,27 +16,40 @@ import Reports from './screens/Reports';
 import AuditLogs from './screens/AuditLogs';
 
 const breadcrumbMap: Record<string, string> = {
-  command: 'Command Center',
-  cases: 'Cases',
-  'case-detail': 'Cases / NCRP-26-81942',
-  prediction: 'Prediction Engine',
-  geo: 'Geo Intelligence',
+  command:      'Command Center',
+  cases:        'Cases',
+  'case-detail':'Cases / NCRP-26-81942',
+  prediction:   'Prediction Engine',
+  geo:          'Geo Intelligence',
   'fraud-network': 'Fraud Network',
-  osint: 'OSINT Intelligence',
-  alerts: 'Alert Center',
-  copilot: 'AI Copilot',
-  reports: 'Reports',
-  datasources: 'Data Sources',
-  model: 'Model Monitor',
-  audit: 'Audit Logs',
-  settings: 'Settings',
-  help: 'Help & Documentation',
+  osint:        'OSINT Intelligence',
+  alerts:       'Alert Center',
+  copilot:      'AI Copilot',
+  reports:      'Reports',
+  datasources:  'Data Sources',
+  audit:        'Security & Audit',
 };
 
+interface AuthState {
+  isLoggedIn: boolean;
+  role: string;
+  officerId: string;
+}
+
 export default function App() {
+  const [auth, setAuth] = useState<AuthState>({ isLoggedIn: false, role: '', officerId: '' });
   const [activeScreen, setActiveScreen] = useState('command');
 
   const navigate = (screen: string) => setActiveScreen(screen);
+
+  const handleLogin = (role: string, officerId: string) => {
+    setAuth({ isLoggedIn: true, role, officerId });
+  };
+
+  // Not logged in → show Login screen
+  if (!auth.isLoggedIn) {
+    return <Login onLogin={handleLogin} />;
+  }
 
   const renderScreen = () => {
     switch (activeScreen) {
@@ -68,7 +82,12 @@ export default function App() {
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="text-center">
               <div className="w-14 h-14 rounded-2xl bg-[#F7F8FA] border border-[#E2E8F0] flex items-center justify-center mx-auto mb-4">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/><rect x="12" y="3" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/><rect x="3" y="12" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/><rect x="12" y="12" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/></svg>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/>
+                  <rect x="12" y="3" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/>
+                  <rect x="3" y="12" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/>
+                  <rect x="12" y="12" width="7" height="7" rx="1.5" stroke="#94A3B8" strokeWidth="1.4"/>
+                </svg>
               </div>
               <div className="font-semibold text-[#0F172A] mb-1">{breadcrumbMap[activeScreen] || 'Under Construction'}</div>
               <div className="text-sm text-[#94A3B8]">This section is coming soon.</div>
@@ -86,6 +105,8 @@ export default function App() {
       <Sidebar
         active={activeScreen === 'case-detail' ? 'cases' : activeScreen}
         onNavigate={navigate}
+        officerId={auth.officerId}
+        role={auth.role}
       />
 
       {/* Main Area */}
@@ -94,6 +115,7 @@ export default function App() {
         <TopBar
           breadcrumb={breadcrumbMap[activeScreen]}
           onCopilotOpen={() => navigate('copilot')}
+          officerId={auth.officerId}
         />
 
         {/* Screen Content */}

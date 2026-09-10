@@ -1,18 +1,6 @@
 import React, { useState } from 'react';
-import { Card, RiskBadge, Button, SearchBar, FilterSelect, FeatureTag } from '../components/ui';
-
-const cases = [
-  { id: 'NCRP-26-81942', type: 'Investment Fraud', reported: '12 min ago', amount: '₹4.8L', source: 'Delhi', predicted: 'Gurugram', risk: 91, level: 'critical' as const, status: 'Active', investigator: 'A. Mehta' },
-  { id: 'NCRP-26-81911', type: 'Digital Arrest', reported: '31 min ago', amount: '₹9.4L', source: 'Lucknow', predicted: 'Jaipur', risk: 86, level: 'critical' as const, status: 'Active', investigator: 'R. Sharma' },
-  { id: 'NCRP-26-81895', type: 'Investment Fraud', reported: '44 min ago', amount: '₹7.1L', source: 'Noida', predicted: 'Jaipur', risk: 79, level: 'high' as const, status: 'Active', investigator: 'P. Verma' },
-  { id: 'NCRP-26-81773', type: 'UPI Fraud', reported: '1h 12min ago', amount: '₹2.2L', source: 'Mumbai', predicted: 'Thane', risk: 72, level: 'high' as const, status: 'In Review', investigator: 'S. Gupta' },
-  { id: 'NCRP-26-81742', type: 'Impersonation', reported: '2h 04min ago', amount: '₹1.4L', source: 'Bengaluru', predicted: 'Bengaluru Central', risk: 65, level: 'high' as const, status: 'Active', investigator: 'M. Nair' },
-  { id: 'NCRP-26-81631', type: 'UPI Fraud', reported: '3h 18min ago', amount: '₹0.8L', source: 'Hyderabad', predicted: 'Secunderabad', risk: 54, level: 'medium' as const, status: 'Investigating', investigator: 'K. Reddy' },
-  { id: 'NCRP-26-81602', type: 'Investment Fraud', reported: '4h 52min ago', amount: '₹3.6L', source: 'Kolkata', predicted: 'Salt Lake', risk: 48, level: 'medium' as const, status: 'In Review', investigator: 'D. Bose' },
-  { id: 'NCRP-26-81540', type: 'Digital Arrest', reported: '6h 30min ago', amount: '₹12.2L', source: 'Chennai', predicted: 'T. Nagar', risk: 41, level: 'medium' as const, status: 'Investigating', investigator: 'A. Kumar' },
-  { id: 'NCRP-26-81498', type: 'Impersonation', reported: '8h ago', amount: '₹0.6L', source: 'Pune', predicted: 'Pimpri', risk: 28, level: 'low' as const, status: 'Resolved', investigator: 'N. Patil' },
-  { id: 'NCRP-26-81347', type: 'UPI Fraud', reported: '11h ago', amount: '₹0.4L', source: 'Ahmedabad', predicted: 'N/A', risk: 15, level: 'low' as const, status: 'Resolved', investigator: 'H. Patel' },
-];
+import { Card, Button, SearchBar, FilterSelect, FeatureTag } from '../components/ui';
+import { MOCK_CASES } from '../data/mockCases';
 
 const statusColors: Record<string, string> = {
   'Active': 'bg-red-50 text-red-600 border-red-200',
@@ -26,11 +14,11 @@ export default function Cases({ onOpenCase }: { onOpenCase: () => void }) {
   const [activeTab, setActiveTab] = useState('all');
 
   const tabs = [
-    { id: 'all', label: 'All Cases', count: 1284 },
-    { id: 'critical', label: 'Critical', count: 89 },
-    { id: 'active', label: 'Active', count: 412 },
-    { id: 'reviewing', label: 'In Review', count: 203 },
-    { id: 'resolved', label: 'Resolved', count: 580 },
+    { id: 'all', label: 'All Cases', count: MOCK_CASES.length },
+    { id: 'critical', label: 'Critical', count: MOCK_CASES.filter(c => c.riskLevel === 'critical').length },
+    { id: 'active', label: 'Active', count: MOCK_CASES.filter(c => c.status === 'Active').length },
+    { id: 'reviewing', label: 'In Review', count: MOCK_CASES.filter(c => c.status === 'In Review').length },
+    { id: 'resolved', label: 'Resolved', count: MOCK_CASES.filter(c => c.status === 'Resolved').length },
   ];
 
   return (
@@ -110,28 +98,28 @@ export default function Cases({ onOpenCase }: { onOpenCase: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {cases.map((c, i) => (
+              {MOCK_CASES.map((c, i) => (
                 <tr
-                  key={c.id}
+                  key={c.caseId}
                   onClick={onOpenCase}
                   className={`border-b border-[#F1F5F9] hover:bg-[#F7FFFE] cursor-pointer transition-colors ${i % 2 === 0 ? '' : 'bg-[#FAFBFC]'}`}
                 >
                   <td className="px-5 py-3.5">
-                    <div className="font-mono text-xs font-bold text-[#0F172A]">{c.id}</div>
+                    <div className="font-mono text-xs font-bold text-[#0F172A]">{c.caseId}</div>
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className="text-sm text-[#0F172A]">{c.type}</span>
+                    <span className="text-sm text-[#0F172A]">{c.fraudType}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-xs text-[#64748B] font-mono">{c.reported}</td>
+                  <td className="px-4 py-3.5 text-xs text-[#64748B] font-mono">{c.reportedAgo}</td>
                   <td className="px-4 py-3.5">
                     <span className="text-sm font-semibold text-[#0F172A]">{c.amount}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-[#64748B]">{c.source}</td>
+                  <td className="px-4 py-3.5 text-sm text-[#64748B]">{c.sourceLocation}</td>
                   <td className="px-4 py-3.5">
-                    {c.predicted !== 'N/A' ? (
+                    {c.predictedZone ? (
                       <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: c.level === 'critical' ? '#E5484D' : c.level === 'high' ? '#F97316' : '#F59E0B' }} />
-                        <span className="text-xs font-medium text-[#0F172A]">{c.predicted}</span>
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ background: c.riskLevel === 'critical' ? '#E5484D' : c.riskLevel === 'high' ? '#F97316' : '#F59E0B' }} />
+                        <span className="text-xs font-medium text-[#0F172A]">{c.predictedZone}</span>
                       </div>
                     ) : <span className="text-xs text-[#94A3B8]">—</span>}
                   </td>
@@ -139,11 +127,11 @@ export default function Cases({ onOpenCase }: { onOpenCase: () => void }) {
                     <div className="flex items-center gap-2">
                       <div className="w-16 h-1.5 bg-[#F1F5F9] rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{
-                          width: `${c.risk}%`,
-                          background: c.risk > 80 ? '#E5484D' : c.risk > 60 ? '#F97316' : c.risk > 40 ? '#F59E0B' : '#14B8A6',
+                          width: `${c.riskScore}%`,
+                          background: c.riskScore > 80 ? '#E5484D' : c.riskScore > 60 ? '#F97316' : c.riskScore > 40 ? '#F59E0B' : '#14B8A6',
                         }} />
                       </div>
-                      <span className="font-mono text-xs font-semibold text-[#0F172A]">{c.risk}</span>
+                      <span className="font-mono text-xs font-semibold text-[#0F172A]">{c.riskScore}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3.5">
@@ -161,16 +149,9 @@ export default function Cases({ onOpenCase }: { onOpenCase: () => void }) {
           </table>
         </div>
         <div className="flex items-center justify-between px-5 py-3 border-t border-[#E2E8F0]">
-          <span className="text-xs text-[#64748B]">Showing 10 of 1,284 cases</span>
+          <span className="text-xs text-[#64748B]">Showing {MOCK_CASES.length} cases</span>
           <div className="flex items-center gap-1">
-            {[1, 2, 3, '...', 129].map((p, i) => (
-              <button
-                key={i}
-                className={`w-8 h-8 text-xs rounded-lg transition-colors ${p === 1 ? 'bg-[#14B8A6] text-white font-semibold' : 'text-[#64748B] hover:bg-[#F7F8FA] border border-[#E2E8F0]'}`}
-              >
-                {p}
-              </button>
-            ))}
+            <button className="w-8 h-8 text-xs rounded-lg transition-colors bg-[#14B8A6] text-white font-semibold">1</button>
           </div>
         </div>
       </Card>

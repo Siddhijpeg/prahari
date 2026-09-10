@@ -5,16 +5,28 @@ import React from 'react';
 export function FeatureTag({ type }: { type: 'sih' | 'usp' }) {
   if (type === 'sih') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wide bg-blue-50 text-blue-600 border border-blue-200">
-        <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><circle cx="4" cy="4" r="3" fill="#3B82F6"/></svg>
-        SIH Core
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-blue-50 text-blue-600 border border-blue-200">
+        CORE
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold uppercase tracking-wide bg-[#7C5CFC]/8 text-[#7C5CFC] border border-[#7C5CFC]/20">
-      <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M4 0.5L5 3H7.5L5.5 4.5L6.2 7L4 5.5L1.8 7L2.5 4.5L0.5 3H3L4 0.5Z" fill="#7C5CFC"/></svg>
-      TRINETRA USP
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest bg-[#7C5CFC]/8 text-[#7C5CFC] border border-[#7C5CFC]/20">
+      TRINETRA+
+    </span>
+  );
+}
+
+// ─── Prototype Badge ──────────────────────────────────────────────────────────
+// Used sparingly to label frontend-simulated features without cluttering the UI
+
+export function PrototypeBadge({ tooltip }: { tooltip?: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-50 text-amber-600 border border-amber-200 cursor-default"
+      title={tooltip || 'Prototype simulation — will be driven by real model output in production.'}
+    >
+      SIM
     </span>
   );
 }
