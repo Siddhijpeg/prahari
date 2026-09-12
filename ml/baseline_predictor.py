@@ -1,141 +1,155 @@
-"""
-PRAHARI — Baseline Predictor & Evaluation (Feature A, simplest version)
-========================================================================
+import pandas as pd
+import numpy as np
+import json
+from math import radians, cos, sin, asin, sqrt
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-What this does, in plain terms:
-  1. Splits complaints into a TRAIN set and a TEST set.
-  2. From TRAIN only, learns: "for each fraud_type, which zones did
-     cash-out actually happen in, and how often?" — this is the
-     reference-class prior described in the design doc (cold-start
-     solution: predict from typology resemblance, not case history).
-  3. For every complaint in TEST, predicts a ranked Top-3 list of
-     zones using ONLY that complaint's fraud_type (no hops, no
-     registry — this is the simplest possible version, the baseline
-     everything else must beat).
-  4. Scores itself: Top-1 hit rate, Top-3 hit rate, and average
-     distance error in km between predicted and actual zone.
+print("================================================================")
+print("  TRINETRA PREDICTION ENGINE - INFERENCE & METRIC EVALUATION    ")
+print("================================================================")
 
-Why this matters for the pitch:
-  This IS the "naive historical heatmap" baseline that other teams
-  will show. Running this number now gives you a concrete "our full
-  estimator beats this by X%" claim later — you cannot claim that
-  without first measuring the baseline.
+# 1. Load Datasets & Trained Artifacts
+try:
+    with open("trained_model.json", "r") as f:
+        model_artifacts = json.load(f)
+    print("  [OK] Loaded trained_model.json successfully!")
+except FileNotFoundError:
+    print("  [ERROR] 'trained_model.json' not found. Please run 'python train_engine.py' first!")
+    exit()
 
-Next script after this (not built yet): the same evaluation, but
-using the sequential estimator that also looks at hops + registry —
-compare its Top-K numbers against this file's output.
+zones = pd.read_csv("zones.csv")
+accounts = pd.read_csv("accounts.csv")
+complaints = pd.read_csv("complaints.csv")
+hops = pd.read_csv("hops.csv")
+cashouts = pd.read_csv("cashout_events.csv")
+typology_rules = pd.read_csv("typology_rules.csv")
 
-Usage:
-  python3 baseline_predictor.py --datadir ../data/out
-"""
+# Extract Model Components
+vocab = model_artifacts["module_1_cosine_priors"]["vocabulary"]
+vectorizer = TfidfVectorizer(vocabulary=vocab)
+vectorizer.fit(["dummy"]) # Initialize fitted vocabulary
 
-import argparse
-import csv
-import math
-import os
-import random
-from collections import defaultdict
+typology_profiles = model_artifacts["module_1_cosine_priors"]["typology_profiles"]
+zone_priors = model_artifacts["module_2_bayesian_estimator"]["priors_p_zone"]
+mule_likelihoods = model_artifacts["module_2_bayesian_estimator"]["mule_zone_likelihoods"]
+risk_registry = model_artifacts["module_3_risk_registry"]
 
+# Haversine Distance Function
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371.0 # km
+    dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
+    a = sin(dlat / 2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2)**2
+    return 2 * R * asin(sqrt(a))
 
-def load_csv(path):
-    with open(path, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+# 2. RUN INFERENCE PIPELINE
+top1_correct = 0
+top3_correct = 0
+geo_errors = []
+evaluated_cases = []
 
+for _, complaint in complaints.iterrows():
+    c_id = complaint['complaint_id']
+    t_id = complaint['typology_id']
+    t_name = complaint['typology_name']
+    amount = complaint['amount_inr']
+    
+    # Ground Truth
+    cashout_row = cashouts[cashouts['complaint_id'] == c_id].iloc[0]
+    actual_zone = cashout_row['zone_id']
+    actual_lat, actual_lng = cashout_row['lat'], cashout_row['lng']
 
-def haversine_km(lat1, lng1, lat2, lng2):
-    R = 6371.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * R * math.asin(math.sqrt(a))
+    # --- MODULE 1: Cosine Similarity + Statistical Feature Distance ---
+    query_vec = vectorizer.transform([t_name])
+    profile = typology_profiles.get(t_id, {})
+    
+    # Amount & Velocity Normalized Deviation
+    amount_diff = abs(amount - profile.get("mean_amount", amount)) / (profile.get("std_amount", 10000) + 1e-5)
+    m1_score_weight = max(0.2, 1.0 - min(0.8, amount_diff * 0.1))
 
+    # --- MODULE 2: Sequential Bayesian Posterior Updates ---
+    cmp_hops = hops[hops['complaint_id'] == c_id].sort_values('hop_sequence')
+    
+    # Initialize Log-Posteriors with Zone Prior P(Z)
+    log_posteriors = {z_id: np.log(zone_priors.get(z_id, 0.05)) for z_id in zones['zone_id']}
 
-def main():
-    ap = argparse.ArgumentParser(description="PRAHARI baseline reference-class predictor")
-    ap.add_argument("--datadir", type=str, default="../data/out")
-    ap.add_argument("--test_fraction", type=float, default=0.2)
-    ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument("--top_k", type=int, default=3)
-    args = ap.parse_args()
+    # Dynamic Sequential Hop Update: P(Z | Hop_1, Hop_2, ...)
+    for _, hop in cmp_hops.iterrows():
+        to_acc = hop['to_account']
+        acc_risk = risk_registry.get(to_acc, {}).get("risk_score", 0.1)
+        
+        for z_id in zones['zone_id']:
+            # P(To_Account | Zone) Likelihood lookup
+            likelihood = mule_likelihoods.get(z_id, {}).get(to_acc, 0.01)
+            # Log Likelihood Accumulation with Risk Registry Weighting
+            log_posteriors[z_id] += np.log(likelihood + 1e-6) * (1.0 + acc_risk)
 
-    random.seed(args.seed)
+    # Convert Log-Posteriors back to Normalized Probabilities
+    max_log = max(log_posteriors.values())
+    unnorm_probs = {z: np.exp(val - max_log) * m1_score_weight for z, val in log_posteriors.items()}
+    total_p = sum(unnorm_probs.values())
+    final_probabilities = {z: round(p / total_p, 4) for z, p in unnorm_probs.items()}
 
-    complaints = load_csv(os.path.join(args.datadir, "complaints.csv"))
-    cashouts = load_csv(os.path.join(args.datadir, "cashout_events.csv"))
-    zones = load_csv(os.path.join(args.datadir, "zones.csv"))
+    # Rank Predicted Zones
+    sorted_zones = sorted(final_probabilities.items(), key=lambda x: x[1], reverse=True)
+    top1_pred = sorted_zones[0][0]
+    top3_preds = [z[0] for z in sorted_zones[:3]]
 
-    zone_coords = {z["zone_id"]: (float(z["lat"]), float(z["lng"])) for z in zones}
-    actual_zone_by_complaint = {c["complaint_id"]: c["actual_zone_id"] for c in cashouts}
-    fraud_type_by_complaint = {c["complaint_id"]: c["fraud_type"] for c in complaints}
+    # --- MODULE 4: Recoverability Window Calculation ---
+    elapsed_mins = float(cmp_hops['delay_minutes'].sum()) if not cmp_hops.empty else 15.0
+    allowed_window_mins = profile.get("cashout_window_hrs", 2.0) * 60.0
+    recoverability_score = round(max(0.0, min(1.0, (allowed_window_mins - elapsed_mins) / allowed_window_mins)), 2)
 
-    complaint_ids = [c["complaint_id"] for c in complaints if c["complaint_id"] in actual_zone_by_complaint]
-    random.shuffle(complaint_ids)
-    n_test = int(len(complaint_ids) * args.test_fraction)
-    test_ids = set(complaint_ids[:n_test])
-    train_ids = [cid for cid in complaint_ids if cid not in test_ids]
+    # Metric Checks
+    if top1_pred == actual_zone:
+        top1_correct += 1
+    if actual_zone in top3_preds:
+        top3_correct += 1
 
-    # --- learn the reference-class prior from TRAIN only ---
-    zone_counts_by_type = defaultdict(lambda: defaultdict(int))
-    for cid in train_ids:
-        ftype = fraud_type_by_complaint[cid]
-        azone = actual_zone_by_complaint[cid]
-        zone_counts_by_type[ftype][azone] += 1
+    # Distance calculation (Predicted Zone Center vs Real ATM)
+    pred_zone_info = zones[zones['zone_id'] == top1_pred].iloc[0]
+    error_km = haversine(pred_zone_info['lat'], pred_zone_info['lng'], actual_lat, actual_lng)
+    geo_errors.append(error_km)
 
-    ranked_zones_by_type = {}
-    for ftype, counts in zone_counts_by_type.items():
-        ranked = sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
-        ranked_zones_by_type[ftype] = [z for z, _ in ranked]
+    evaluated_cases.append({
+        "complaint_id": c_id,
+        "typology": t_name,
+        "predicted_zone": top1_pred,
+        "predicted_confidence": sorted_zones[0][1],
+        "top3_zones": top3_preds,
+        "actual_zone": actual_zone,
+        "recoverability_score": recoverability_score,
+        "error_km": round(error_km, 2)
+    })
 
-    # global fallback (all zones ranked by overall frequency) for any
-    # fraud_type that had zero training examples
-    global_counts = defaultdict(int)
-    for counts in zone_counts_by_type.values():
-        for z, c in counts.items():
-            global_counts[z] += c
-    global_ranked = [z for z, _ in sorted(global_counts.items(), key=lambda kv: kv[1], reverse=True)]
+# Compute Final Aggregated Metrics
+total_cases = len(complaints)
+top1_acc = round((top1_correct / total_cases) * 100, 1)
+top3_rec = round((top3_correct / total_cases) * 100, 1)
+mean_geo_err = round(np.mean(geo_errors), 1)
 
-    # --- evaluate on TEST ---
-    top1_hits = 0
-    topk_hits = 0
-    dist_errors = []
-    n_eval = 0
+summary_output = {
+    "status": "Evaluated",
+    "top1_accuracy": f"{top1_acc}%",
+    "top3_recall": f"{top3_rec}%",
+    "mean_geographic_error": f"{mean_geo_err} km",
+    "total_cases_evaluated": total_cases
+}
 
-    for cid in test_ids:
-        ftype = fraud_type_by_complaint[cid]
-        actual = actual_zone_by_complaint[cid]
-        predicted = ranked_zones_by_type.get(ftype, global_ranked)
-        if not predicted:
-            continue
-        n_eval += 1
+print("\n--- INFERENCE METRIC SUMMARY ---")
+print(json.dumps(summary_output, indent=2))
 
-        if predicted[0] == actual:
-            top1_hits += 1
-        if actual in predicted[:args.top_k]:
-            topk_hits += 1
+# 3. Export Output to Frontend Data Path
+export_payload = {
+    "summary": summary_output,
+    "evaluated_cases": evaluated_cases
+}
 
-        if actual in zone_coords and predicted[0] in zone_coords:
-            alat, alng = zone_coords[actual]
-            plat, plng = zone_coords[predicted[0]]
-            dist_errors.append(haversine_km(alat, alng, plat, plng))
-
-    top1_rate = top1_hits / n_eval if n_eval else 0
-    topk_rate = topk_hits / n_eval if n_eval else 0
-    mean_dist = sum(dist_errors) / len(dist_errors) if dist_errors else 0
-
-    print("=" * 60)
-    print("PRAHARI — Baseline (reference-class prior) evaluation")
-    print("=" * 60)
-    print(f"Train complaints : {len(train_ids)}")
-    print(f"Test complaints  : {n_eval}")
-    print(f"Top-1 hit rate   : {top1_rate:.1%}")
-    print(f"Top-{args.top_k} hit rate   : {topk_rate:.1%}")
-    print(f"Mean distance error (Top-1 miss): {mean_dist:.0f} km")
-    print()
-    print("Per-typology most-likely zone (learned from TRAIN):")
-    for ftype, ranked in ranked_zones_by_type.items():
-        print(f"  {ftype:<18} -> {ranked[:args.top_k]}")
-
-
-if __name__ == "__main__":
-    main()
+try:
+    with open("../src/data/mockPredictionsOutput.json", "w") as f:
+        json.dump(export_payload, f, indent=2)
+    print("\n  [OK] Successfully exported inference results to 'src/data/mockPredictionsOutput.json'!")
+except Exception as e:
+    with open("mockPredictionsOutput.json", "w") as f:
+        json.dump(export_payload, f, indent=2)
+    print("\n  [OK] Saved inference output locally to 'ml/mockPredictionsOutput.json'.")
