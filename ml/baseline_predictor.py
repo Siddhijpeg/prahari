@@ -1,155 +1,222 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import pandas as pd
 import numpy as np
 import json
+import xgboost as xgb
 from math import radians, cos, sin, asin, sqrt
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from scripts.data_prep.feature_engineering import get_engineered_data
 
 print("================================================================")
-print("  TRINETRA PREDICTION ENGINE - INFERENCE & METRIC EVALUATION    ")
+print("  TRINETRA PREDICTION ENGINE - EVALUATION (NO LEAKAGE) ")
 print("================================================================")
 
-# 1. Load Datasets & Trained Artifacts
+# 1. Load STRICTLY Test Data
+c_feat, h_feat, targets = get_engineered_data("test", "../data/generated/splits")
+zones_df = pd.read_csv("../data/generated/full/zones.csv")
+
+with open("../data/generated/splits/test_special_splits.json", "r") as f:
+    special_splits = json.load(f)
+    
+known_mules = set(special_splits["known_mule_cases"])
+unseen_mules = set(special_splits["unseen_mule_cases"])
+
+print(f"Loaded {len(c_feat)} test cases.")
+
 try:
     with open("trained_model.json", "r") as f:
         model_artifacts = json.load(f)
-    print("  [OK] Loaded trained_model.json successfully!")
+    xgb_model = xgb.XGBClassifier()
+    xgb_model.load_model("xgboost_model.json")
+    print("  [OK] Loaded trained models successfully!")
 except FileNotFoundError:
-    print("  [ERROR] 'trained_model.json' not found. Please run 'python train_engine.py' first!")
-    exit()
-
-zones = pd.read_csv("zones.csv")
-accounts = pd.read_csv("accounts.csv")
-complaints = pd.read_csv("complaints.csv")
-hops = pd.read_csv("hops.csv")
-cashouts = pd.read_csv("cashout_events.csv")
-typology_rules = pd.read_csv("typology_rules.csv")
+    print("  [ERROR] Trained models not found. Please run 'python3 train_engine.py' first!")
+    sys.exit(1)
 
 # Extract Model Components
-vocab = model_artifacts["module_1_cosine_priors"]["vocabulary"]
-vectorizer = TfidfVectorizer(vocabulary=vocab)
-vectorizer.fit(["dummy"]) # Initialize fitted vocabulary
+global_prior = model_artifacts["global_prior"]
+typology_priors = model_artifacts["typology_priors"]
+mule_zone_likelihoods = model_artifacts["mule_zone_likelihoods"]
+node_risk_registry = model_artifacts["node_risk_registry"]
+encoders = model_artifacts["encoders"]
+xgb_features = model_artifacts["xgb_features"]
 
-typology_profiles = model_artifacts["module_1_cosine_priors"]["typology_profiles"]
-zone_priors = model_artifacts["module_2_bayesian_estimator"]["priors_p_zone"]
-mule_likelihoods = model_artifacts["module_2_bayesian_estimator"]["mule_zone_likelihoods"]
-risk_registry = model_artifacts["module_3_risk_registry"]
+zone_list = encoders["target_zone"]
 
-# Haversine Distance Function
 def haversine(lat1, lon1, lat2, lon2):
-    R = 6371.0 # km
+    R = 6371.0
     dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
     a = sin(dlat / 2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2)**2
     return 2 * R * asin(sqrt(a))
 
-# 2. RUN INFERENCE PIPELINE
-top1_correct = 0
-top3_correct = 0
-geo_errors = []
-evaluated_cases = []
+def get_zone_coords(z_id):
+    row = zones_df[zones_df['zone_id'] == z_id]
+    if not row.empty:
+        return row.iloc[0]['lat'], row.iloc[0]['lng']
+    return 0.0, 0.0
 
-for _, complaint in complaints.iterrows():
-    c_id = complaint['complaint_id']
-    t_id = complaint['typology_id']
-    t_name = complaint['typology_name']
-    amount = complaint['amount_inr']
+def evaluate_predictions(predictions, targets, c_ids, split_name):
+    """
+    predictions: dict { c_id: { zone_id: prob } }
+    """
+    top1 = 0
+    top3 = 0
+    geo_errors = []
     
-    # Ground Truth
-    cashout_row = cashouts[cashouts['complaint_id'] == c_id].iloc[0]
-    actual_zone = cashout_row['zone_id']
-    actual_lat, actual_lng = cashout_row['lat'], cashout_row['lng']
-
-    # --- MODULE 1: Cosine Similarity + Statistical Feature Distance ---
-    query_vec = vectorizer.transform([t_name])
-    profile = typology_profiles.get(t_id, {})
-    
-    # Amount & Velocity Normalized Deviation
-    amount_diff = abs(amount - profile.get("mean_amount", amount)) / (profile.get("std_amount", 10000) + 1e-5)
-    m1_score_weight = max(0.2, 1.0 - min(0.8, amount_diff * 0.1))
-
-    # --- MODULE 2: Sequential Bayesian Posterior Updates ---
-    cmp_hops = hops[hops['complaint_id'] == c_id].sort_values('hop_sequence')
-    
-    # Initialize Log-Posteriors with Zone Prior P(Z)
-    log_posteriors = {z_id: np.log(zone_priors.get(z_id, 0.05)) for z_id in zones['zone_id']}
-
-    # Dynamic Sequential Hop Update: P(Z | Hop_1, Hop_2, ...)
-    for _, hop in cmp_hops.iterrows():
-        to_acc = hop['to_account']
-        acc_risk = risk_registry.get(to_acc, {}).get("risk_score", 0.1)
+    count = 0
+    for c_id in c_ids:
+        if c_id not in predictions:
+            continue
+            
+        preds = predictions[c_id]
+        sorted_zones = sorted(preds.items(), key=lambda x: x[1], reverse=True)
+        top_zones = [z[0] for z in sorted_zones]
         
-        for z_id in zones['zone_id']:
-            # P(To_Account | Zone) Likelihood lookup
-            likelihood = mule_likelihoods.get(z_id, {}).get(to_acc, 0.01)
-            # Log Likelihood Accumulation with Risk Registry Weighting
-            log_posteriors[z_id] += np.log(likelihood + 1e-6) * (1.0 + acc_risk)
+        actual_zone = targets[targets['complaint_id'] == c_id].iloc[0]['zone_id']
+        
+        if top_zones[0] == actual_zone:
+            top1 += 1
+        if actual_zone in top_zones[:3]:
+            top3 += 1
+            
+        pred_lat, pred_lng = get_zone_coords(top_zones[0])
+        actual_lat, actual_lng = get_zone_coords(actual_zone)
+        geo_errors.append(haversine(pred_lat, pred_lng, actual_lat, actual_lng))
+        
+        count += 1
+        
+    return {
+        "count": count,
+        "top1_acc": round((top1 / count) * 100, 1) if count > 0 else 0.0,
+        "top3_recall": round((top3 / count) * 100, 1) if count > 0 else 0.0,
+        "mean_geo_err_km": round(np.mean(geo_errors), 1) if count > 0 else 0.0
+    }
 
-    # Convert Log-Posteriors back to Normalized Probabilities
-    max_log = max(log_posteriors.values())
-    unnorm_probs = {z: np.exp(val - max_log) * m1_score_weight for z, val in log_posteriors.items()}
-    total_p = sum(unnorm_probs.values())
-    final_probabilities = {z: round(p / total_p, 4) for z, p in unnorm_probs.items()}
+# 2. RUN INFERENCE FOR ALL MODELS
+# M0: Global Prior
+m0_preds = {row['complaint_id']: global_prior for _, row in c_feat.iterrows()}
 
-    # Rank Predicted Zones
-    sorted_zones = sorted(final_probabilities.items(), key=lambda x: x[1], reverse=True)
-    top1_pred = sorted_zones[0][0]
-    top3_preds = [z[0] for z in sorted_zones[:3]]
+# M1: Typology Prior
+m1_preds = {}
+for _, row in c_feat.iterrows():
+    m1_preds[row['complaint_id']] = typology_priors.get(row['typology_id'], global_prior)
 
-    # --- MODULE 4: Recoverability Window Calculation ---
-    elapsed_mins = float(cmp_hops['delay_minutes'].sum()) if not cmp_hops.empty else 15.0
-    allowed_window_mins = profile.get("cashout_window_hrs", 2.0) * 60.0
-    recoverability_score = round(max(0.0, min(1.0, (allowed_window_mins - elapsed_mins) / allowed_window_mins)), 2)
-
-    # Metric Checks
-    if top1_pred == actual_zone:
-        top1_correct += 1
-    if actual_zone in top3_preds:
-        top3_correct += 1
-
-    # Distance calculation (Predicted Zone Center vs Real ATM)
-    pred_zone_info = zones[zones['zone_id'] == top1_pred].iloc[0]
-    error_km = haversine(pred_zone_info['lat'], pred_zone_info['lng'], actual_lat, actual_lng)
-    geo_errors.append(error_km)
-
-    evaluated_cases.append({
-        "complaint_id": c_id,
-        "typology": t_name,
-        "predicted_zone": top1_pred,
-        "predicted_confidence": sorted_zones[0][1],
-        "top3_zones": top3_preds,
-        "actual_zone": actual_zone,
-        "recoverability_score": recoverability_score,
-        "error_km": round(error_km, 2)
-    })
-
-# Compute Final Aggregated Metrics
-total_cases = len(complaints)
-top1_acc = round((top1_correct / total_cases) * 100, 1)
-top3_rec = round((top3_correct / total_cases) * 100, 1)
-mean_geo_err = round(np.mean(geo_errors), 1)
-
-summary_output = {
-    "status": "Evaluated",
-    "top1_accuracy": f"{top1_acc}%",
-    "top3_recall": f"{top3_rec}%",
-    "mean_geographic_error": f"{mean_geo_err} km",
-    "total_cases_evaluated": total_cases
-}
-
-print("\n--- INFERENCE METRIC SUMMARY ---")
-print(json.dumps(summary_output, indent=2))
-
-# 3. Export Output to Frontend Data Path
-export_payload = {
-    "summary": summary_output,
-    "evaluated_cases": evaluated_cases
-}
+# M2: XGBoost Feature Ranker
+print("Running XGBoost Inference...")
+c_full = c_feat.copy()
+first_hops = h_feat[h_feat['hop_sequence'] == 1]
+xgb_df = c_full.merge(first_hops[['complaint_id', 'time_since_incident_mins', 'to_account_historical_flags', 'is_mule', 'amount_retained_ratio']], on='complaint_id', how='left')
+xgb_df.fillna(0, inplace=True)
 
 try:
-    with open("../src/data/mockPredictionsOutput.json", "w") as f:
-        json.dump(export_payload, f, indent=2)
-    print("\n  [OK] Successfully exported inference results to 'src/data/mockPredictionsOutput.json'!")
-except Exception as e:
-    with open("mockPredictionsOutput.json", "w") as f:
-        json.dump(export_payload, f, indent=2)
-    print("\n  [OK] Saved inference output locally to 'ml/mockPredictionsOutput.json'.")
+    xgb_df['victim_state_encoded'] = xgb_df['victim_state'].apply(lambda x: encoders['state'].index(x) if x in encoders['state'] else 0)
+    xgb_df['typology_encoded'] = xgb_df['typology_id'].apply(lambda x: encoders['typology'].index(x) if x in encoders['typology'] else 0)
+except ValueError:
+    pass
+
+X_test = xgb_df[xgb_features]
+xgb_probs = xgb_model.predict_proba(X_test)
+
+m2_preds = {}
+for i, row in xgb_df.iterrows():
+    m2_preds[row['complaint_id']] = {zone_list[j]: float(xgb_probs[i][j]) for j in range(len(zone_list))}
+
+# M3 & M4: Sequential Bayesian Estimators
+print("Running Sequential Bayesian Inference...")
+m3_preds_hop1 = {}
+m3_preds_hop3 = {}
+m4_preds_hop3 = {}
+
+for _, row in c_feat.iterrows():
+    c_id = row['complaint_id']
+    base_prior = typology_priors.get(row['typology_id'], global_prior)
+    
+    # Initialize log posteriors
+    log_post3 = {z: np.log(p + 1e-6) for z, p in base_prior.items()}
+    log_post4 = {z: np.log(p + 1e-6) for z, p in base_prior.items()}
+    
+    c_hops = h_feat[h_feat['complaint_id'] == c_id].sort_values('hop_sequence')
+    
+    for _, hop in c_hops.iterrows():
+        to_acc = hop['to_account']
+        acc_risk_weight = node_risk_registry.get(to_acc, {}).get("risk_weight", 1.0)
+        
+        for z in zone_list:
+            lh = mule_zone_likelihoods.get(z, {}).get(to_acc, 0.01) # Unseen mule smoothing
+            log_lh = np.log(lh + 1e-6)
+            
+            log_post3[z] += log_lh
+            log_post4[z] += (log_lh * acc_risk_weight)
+            
+        if hop['hop_sequence'] == 1:
+            max_log = max(log_post3.values())
+            unnorm = {z: np.exp(val - max_log) for z, val in log_post3.items()}
+            tot = sum(unnorm.values())
+            m3_preds_hop1[c_id] = {z: p/tot for z, p in unnorm.items()}
+            
+    # Final Hop 3+
+    max_log = max(log_post3.values())
+    unnorm = {z: np.exp(val - max_log) for z, val in log_post3.items()}
+    tot = sum(unnorm.values())
+    m3_preds_hop3[c_id] = {z: p/tot for z, p in unnorm.items()}
+    
+    max_log = max(log_post4.values())
+    unnorm = {z: np.exp(val - max_log) for z, val in log_post4.items()}
+    tot = sum(unnorm.values())
+    m4_preds_hop3[c_id] = {z: p/tot for z, p in unnorm.items()}
+
+# 3. COMPUTE EVALUATION METRICS
+print("Computing Metrics...")
+
+all_c_ids = list(c_feat['complaint_id'])
+
+metrics = {
+    "overall": {
+        "M0_Global_Prior": evaluate_predictions(m0_preds, targets, all_c_ids, "overall"),
+        "M1_Typology_Prior": evaluate_predictions(m1_preds, targets, all_c_ids, "overall"),
+        "M2_XGBoost_T1": evaluate_predictions(m2_preds, targets, all_c_ids, "overall"),
+        "M3_Bayes_Hop1": evaluate_predictions(m3_preds_hop1, targets, all_c_ids, "overall"),
+        "M3_Bayes_HopN": evaluate_predictions(m3_preds_hop3, targets, all_c_ids, "overall"),
+        "M4_NetworkEnriched_HopN": evaluate_predictions(m4_preds_hop3, targets, all_c_ids, "overall")
+    },
+    "known_mule": {
+        "M2_XGBoost_T1": evaluate_predictions(m2_preds, targets, known_mules, "known_mule"),
+        "M4_NetworkEnriched_HopN": evaluate_predictions(m4_preds_hop3, targets, known_mules, "known_mule")
+    },
+    "unseen_mule": {
+        "M2_XGBoost_T1": evaluate_predictions(m2_preds, targets, unseen_mules, "unseen_mule"),
+        "M4_NetworkEnriched_HopN": evaluate_predictions(m4_preds_hop3, targets, unseen_mules, "unseen_mule")
+    }
+}
+
+print(json.dumps(metrics, indent=2))
+
+with open("model_comparison.json", "w") as f:
+    json.dump(metrics, f, indent=2)
+    
+# Save mock JSON for frontend using best model (M4)
+frontend_mock = {
+    "summary": metrics["overall"]["M4_NetworkEnriched_HopN"],
+    "evaluated_cases": []
+}
+
+# Just add top 50 cases to not bloat the json
+for c_id in all_c_ids[:50]:
+    preds = m4_preds_hop3.get(c_id, m1_preds.get(c_id))
+    sorted_zones = sorted(preds.items(), key=lambda x: x[1], reverse=True)
+    actual_zone = targets[targets['complaint_id'] == c_id].iloc[0]['zone_id']
+    frontend_mock["evaluated_cases"].append({
+        "complaint_id": c_id,
+        "predicted_zone": sorted_zones[0][0],
+        "predicted_confidence": round(sorted_zones[0][1], 2),
+        "top3_zones": [z[0] for z in sorted_zones[:3]],
+        "actual_zone": actual_zone
+    })
+
+with open("../frontend-nisha/frontend-Nisha/src/data/mockPredictionsOutput.json", "w") as f:
+    json.dump(frontend_mock, f, indent=2)
+    
+print("\n[OK] Evaluation completed. Reports saved.")

@@ -1,0 +1,560 @@
+{
+  "summary": {
+    "count": 6000,
+    "top1_acc": 19.9,
+    "top3_recall": 39.4,
+    "mean_geo_err_km": 802.9
+  },
+  "evaluated_cases": [
+    {
+      "complaint_id": "CMP_202618495",
+      "predicted_zone": "Z011",
+      "predicted_confidence": 1.0,
+      "top3_zones": [
+        "Z011",
+        "Z015",
+        "Z007"
+      ],
+      "actual_zone": "Z003"
+    },
+    {
+      "complaint_id": "CMP_202604849",
+      "predicted_zone": "Z002",
+      "predicted_confidence": 0.09,
+      "top3_zones": [
+        "Z002",
+        "Z009",
+        "Z016"
+      ],
+      "actual_zone": "Z015"
+    },
+    {
+      "complaint_id": "CMP_202632897",
+      "predicted_zone": "Z016",
+      "predicted_confidence": 0.69,
+      "top3_zones": [
+        "Z016",
+        "Z005",
+        "Z004"
+      ],
+      "actual_zone": "Z016"
+    },
+    {
+      "complaint_id": "CMP_202622506",
+      "predicted_zone": "Z002",
+      "predicted_confidence": 0.11,
+      "top3_zones": [
+        "Z002",
+        "Z015",
+        "Z005"
+      ],
+      "actual_zone": "Z004"
+    },
+    {
+      "complaint_id": "CMP_202615101",
+      "predicted_zone": "Z020",
+      "predicted_confidence": 0.1,
+      "top3_zones": [
+        "Z020",
+        "Z015",
+        "Z003"
+      ],
+      "actual_zone": "Z020"
+    },
+    {
+      "complaint_id": "CMP_202623572",
+      "predicted_zone": "Z015",
+      "predicted_confidence": 0.09,
+      "top3_zones": [
+        "Z015",
+        "Z005",
+        "Z006"
+      ],
+      "actual_zone": "Z002"
+    },
+    {
+      "complaint_id": "CMP_202607373",
+      "predicted_zone": "Z012",
+      "predicted_confidence": 0.44,
+      "top3_zones": [
+        "Z012",
+        "Z003",
+        "Z005"
+      ],
+      "actual_zone": "Z050"
+    },
+    {
+      "complaint_id": "CMP_202631816",
+      "predicted_zone": "Z011",
+      "predicted_confidence": 0.97,
+      "top3_zones": [
+        "Z011",
+        "Z003",
+        "Z015"
+      ],
+      "actual_zone": "Z033"
+    },
+    {
+      "complaint_id": "CMP_202624340",
+      "predicted_zone": "Z014",
+      "predicted_confidence": 0.91,
+      "top3_zones": [
+        "Z014",
+        "Z016",
+        "Z003"
+      ],
+      "actual_zone": "Z016"
+    },
+    {
+      "complaint_id": "CMP_202605207",
+      "predicted_zone": "Z075",
+      "predicted_confidence": 0.65,
+      "top3_zones": [
+        "Z075",
+        "Z035",
+        "Z015"
+      ],
+      "actual_zone": "Z075"
+    },
+    {
+      "complaint_id": "CMP_202633310",
+      "predicted_zone": "Z049",
+      "predicted_confidence": 0.66,
+      "top3_zones": [
+        "Z049",
+        "Z058",
+        "Z009"
+      ],
+      "actual_zone": "Z058"
+    },
+    {
+      "complaint_id": "CMP_202625866",
+      "predicted_zone": "Z072",
+      "predicted_confidence": 0.41,
+      "top3_zones": [
+        "Z072",
+        "Z074",
+        "Z005"
+      ],
+      "actual_zone": "Z007"
+    },
+    {
+      "complaint_id": "CMP_202608120",
+      "predicted_zone": "Z048",
+      "predicted_confidence": 1.0,
+      "top3_zones": [
+        "Z048",
+        "Z021",
+        "Z004"
+      ],
+      "actual_zone": "Z004"
+    },
+    {
+      "complaint_id": "CMP_202608701",
+      "predicted_zone": "Z074",
+      "predicted_confidence": 0.98,
+      "top3_zones": [
+        "Z074",
+        "Z022",
+        "Z004"
+      ],
+      "actual_zone": "Z010"
+    },
+    {
+      "complaint_id": "CMP_202625339",
+      "predicted_zone": "Z031",
+      "predicted_confidence": 0.44,
+      "top3_zones": [
+        "Z031",
+        "Z038",
+        "Z004"
+      ],
+      "actual_zone": "Z038"
+    },
+    {
+      "complaint_id": "CMP_202603196",
+      "predicted_zone": "Z021",
+      "predicted_confidence": 0.99,
+      "top3_zones": [
+        "Z021",
+        "Z052",
+        "Z069"
+      ],
+      "actual_zone": "Z004"
+    },
+    {
+      "complaint_id": "CMP_202623060",
+      "predicted_zone": "Z009",
+      "predicted_confidence": 0.08,
+      "top3_zones": [
+        "Z009",
+        "Z001",
+        "Z013"
+      ],
+      "actual_zone": "Z015"
+    },
+    {
+      "complaint_id": "CMP_202618017",
+      "predicted_zone": "Z009",
+      "predicted_confidence": 0.11,
+      "top3_zones": [
+        "Z009",
+        "Z016",
+        "Z002"
+      ],
+      "actual_zone": "Z047"
+    },
+    {
+      "complaint_id": "CMP_202611204",
+      "predicted_zone": "Z035",
+      "predicted_confidence": 0.6,
+      "top3_zones": [
+        "Z035",
+        "Z009",
+        "Z002"
+      ],
+      "actual_zone": "Z007"
+    },
+    {
+      "complaint_id": "CMP_202612586",
+      "predicted_zone": "Z005",
+      "predicted_confidence": 0.17,
+      "top3_zones": [
+        "Z005",
+        "Z004",
+        "Z016"
+      ],
+      "actual_zone": "Z016"
+    },
+    {
+      "complaint_id": "CMP_202624365",
+      "predicted_zone": "Z017",
+      "predicted_confidence": 0.69,
+      "top3_zones": [
+        "Z017",
+        "Z045",
+        "Z026"
+      ],
+      "actual_zone": "Z004"
+    },
+    {
+      "complaint_id": "CMP_202629680",
+      "predicted_zone": "Z014",
+      "predicted_confidence": 0.37,
+      "top3_zones": [
+        "Z014",
+        "Z013",
+        "Z008"
+      ],
+      "actual_zone": "Z013"
+    },
+    {
+      "complaint_id": "CMP_202632032",
+      "predicted_zone": "Z066",
+      "predicted_confidence": 0.72,
+      "top3_zones": [
+        "Z066",
+        "Z041",
+        "Z005"
+      ],
+      "actual_zone": "Z066"
+    },
+    {
+      "complaint_id": "CMP_202608861",
+      "predicted_zone": "Z062",
+      "predicted_confidence": 0.86,
+      "top3_zones": [
+        "Z062",
+        "Z059",
+        "Z003"
+      ],
+      "actual_zone": "Z038"
+    },
+    {
+      "complaint_id": "CMP_202634721",
+      "predicted_zone": "Z031",
+      "predicted_confidence": 0.74,
+      "top3_zones": [
+        "Z031",
+        "Z038",
+        "Z004"
+      ],
+      "actual_zone": "Z038"
+    },
+    {
+      "complaint_id": "CMP_202626476",
+      "predicted_zone": "Z015",
+      "predicted_confidence": 0.09,
+      "top3_zones": [
+        "Z015",
+        "Z002",
+        "Z009"
+      ],
+      "actual_zone": "Z035"
+    },
+    {
+      "complaint_id": "CMP_202600152",
+      "predicted_zone": "Z003",
+      "predicted_confidence": 0.09,
+      "top3_zones": [
+        "Z003",
+        "Z005",
+        "Z007"
+      ],
+      "actual_zone": "Z001"
+    },
+    {
+      "complaint_id": "CMP_202601007",
+      "predicted_zone": "Z016",
+      "predicted_confidence": 0.08,
+      "top3_zones": [
+        "Z016",
+        "Z001",
+        "Z008"
+      ],
+      "actual_zone": "Z009"
+    },
+    {
+      "complaint_id": "CMP_202635743",
+      "predicted_zone": "Z052",
+      "predicted_confidence": 0.83,
+      "top3_zones": [
+        "Z052",
+        "Z036",
+        "Z015"
+      ],
+      "actual_zone": "Z006"
+    },
+    {
+      "complaint_id": "CMP_202617894",
+      "predicted_zone": "Z006",
+      "predicted_confidence": 0.12,
+      "top3_zones": [
+        "Z006",
+        "Z004",
+        "Z002"
+      ],
+      "actual_zone": "Z007"
+    },
+    {
+      "complaint_id": "CMP_202639026",
+      "predicted_zone": "Z015",
+      "predicted_confidence": 0.07,
+      "top3_zones": [
+        "Z015",
+        "Z003",
+        "Z005"
+      ],
+      "actual_zone": "Z007"
+    },
+    {
+      "complaint_id": "CMP_202602457",
+      "predicted_zone": "Z026",
+      "predicted_confidence": 0.16,
+      "top3_zones": [
+        "Z026",
+        "Z004",
+        "Z010"
+      ],
+      "actual_zone": "Z002"
+    },
+    {
+      "complaint_id": "CMP_202635776",
+      "predicted_zone": "Z002",
+      "predicted_confidence": 0.16,
+      "top3_zones": [
+        "Z002",
+        "Z010",
+        "Z014"
+      ],
+      "actual_zone": "Z009"
+    },
+    {
+      "complaint_id": "CMP_202614302",
+      "predicted_zone": "Z015",
+      "predicted_confidence": 0.07,
+      "top3_zones": [
+        "Z015",
+        "Z005",
+        "Z004"
+      ],
+      "actual_zone": "Z003"
+    },
+    {
+      "complaint_id": "CMP_202600848",
+      "predicted_zone": "Z052",
+      "predicted_confidence": 0.86,
+      "top3_zones": [
+        "Z052",
+        "Z005",
+        "Z003"
+      ],
+      "actual_zone": "Z054"
+    },
+    {
+      "complaint_id": "CMP_202601058",
+      "predicted_zone": "Z015",
+      "predicted_confidence": 0.07,
+      "top3_zones": [
+        "Z015",
+        "Z005",
+        "Z004"
+      ],
+      "actual_zone": "Z069"
+    },
+    {
+      "complaint_id": "CMP_202631396",
+      "predicted_zone": "Z001",
+      "predicted_confidence": 0.07,
+      "top3_zones": [
+        "Z001",
+        "Z002",
+        "Z007"
+      ],
+      "actual_zone": "Z009"
+    },
+    {
+      "complaint_id": "CMP_202605756",
+      "predicted_zone": "Z020",
+      "predicted_confidence": 0.76,
+      "top3_zones": [
+        "Z020",
+        "Z007",
+        "Z051"
+      ],
+      "actual_zone": "Z005"
+    },
+    {
+      "complaint_id": "CMP_202611802",
+      "predicted_zone": "Z015",
+      "predicted_confidence": 0.07,
+      "top3_zones": [
+        "Z015",
+        "Z003",
+        "Z005"
+      ],
+      "actual_zone": "Z008"
+    },
+    {
+      "complaint_id": "CMP_202636831",
+      "predicted_zone": "Z055",
+      "predicted_confidence": 1.0,
+      "top3_zones": [
+        "Z055",
+        "Z069",
+        "Z001"
+      ],
+      "actual_zone": "Z069"
+    },
+    {
+      "complaint_id": "CMP_202627208",
+      "predicted_zone": "Z009",
+      "predicted_confidence": 0.11,
+      "top3_zones": [
+        "Z009",
+        "Z016",
+        "Z002"
+      ],
+      "actual_zone": "Z009"
+    },
+    {
+      "complaint_id": "CMP_202620309",
+      "predicted_zone": "Z007",
+      "predicted_confidence": 0.06,
+      "top3_zones": [
+        "Z007",
+        "Z005",
+        "Z029"
+      ],
+      "actual_zone": "Z002"
+    },
+    {
+      "complaint_id": "CMP_202603042",
+      "predicted_zone": "Z043",
+      "predicted_confidence": 0.98,
+      "top3_zones": [
+        "Z043",
+        "Z029",
+        "Z044"
+      ],
+      "actual_zone": "Z043"
+    },
+    {
+      "complaint_id": "CMP_202633333",
+      "predicted_zone": "Z023",
+      "predicted_confidence": 0.77,
+      "top3_zones": [
+        "Z023",
+        "Z019",
+        "Z009"
+      ],
+      "actual_zone": "Z002"
+    },
+    {
+      "complaint_id": "CMP_202629087",
+      "predicted_zone": "Z073",
+      "predicted_confidence": 0.62,
+      "top3_zones": [
+        "Z073",
+        "Z010",
+        "Z009"
+      ],
+      "actual_zone": "Z010"
+    },
+    {
+      "complaint_id": "CMP_202619248",
+      "predicted_zone": "Z008",
+      "predicted_confidence": 0.26,
+      "top3_zones": [
+        "Z008",
+        "Z003",
+        "Z006"
+      ],
+      "actual_zone": "Z010"
+    },
+    {
+      "complaint_id": "CMP_202638994",
+      "predicted_zone": "Z035",
+      "predicted_confidence": 0.49,
+      "top3_zones": [
+        "Z035",
+        "Z005",
+        "Z003"
+      ],
+      "actual_zone": "Z007"
+    },
+    {
+      "complaint_id": "CMP_202609424",
+      "predicted_zone": "Z021",
+      "predicted_confidence": 1.0,
+      "top3_zones": [
+        "Z021",
+        "Z052",
+        "Z069"
+      ],
+      "actual_zone": "Z004"
+    },
+    {
+      "complaint_id": "CMP_202611776",
+      "predicted_zone": "Z004",
+      "predicted_confidence": 0.12,
+      "top3_zones": [
+        "Z004",
+        "Z010",
+        "Z015"
+      ],
+      "actual_zone": "Z072"
+    },
+    {
+      "complaint_id": "CMP_202635582",
+      "predicted_zone": "Z015",
+      "predicted_confidence": 0.09,
+      "top3_zones": [
+        "Z015",
+        "Z002",
+        "Z009"
+      ],
+      "actual_zone": "Z052"
+    }
+  ]
+}

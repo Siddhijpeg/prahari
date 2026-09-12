@@ -1,0 +1,68 @@
+{
+  "overall": {
+    "M0_Global_Prior": {
+      "count": 6000,
+      "top1_acc": 6.2,
+      "top3_recall": 17.8,
+      "mean_geo_err_km": 870.0
+    },
+    "M1_Typology_Prior": {
+      "count": 6000,
+      "top1_acc": 8.6,
+      "top3_recall": 21.9,
+      "mean_geo_err_km": 953.0
+    },
+    "M2_XGBoost_T1": {
+      "count": 6000,
+      "top1_acc": 5.5,
+      "top3_recall": 16.6,
+      "mean_geo_err_km": 969.6
+    },
+    "M3_Bayes_Hop1": {
+      "count": 6000,
+      "top1_acc": 12.4,
+      "top3_recall": 29.4,
+      "mean_geo_err_km": 893.0
+    },
+    "M3_Bayes_HopN": {
+      "count": 6000,
+      "top1_acc": 17.1,
+      "top3_recall": 34.9,
+      "mean_geo_err_km": 833.9
+    },
+    "M4_NetworkEnriched_HopN": {
+      "count": 6000,
+      "top1_acc": 19.9,
+      "top3_recall": 39.4,
+      "mean_geo_err_km": 802.9
+    }
+  },
+  "known_mule": {
+    "M2_XGBoost_T1": {
+      "count": 5880,
+      "top1_acc": 5.5,
+      "top3_recall": 16.6,
+      "mean_geo_err_km": 971.2
+    },
+    "M4_NetworkEnriched_HopN": {
+      "count": 5880,
+      "top1_acc": 20.1,
+      "top3_recall": 39.7,
+      "mean_geo_err_km": 799.8
+    }
+  },
+  "unseen_mule": {
+    "M2_XGBoost_T1": {
+      "count": 120,
+      "top1_acc": 5.8,
+      "top3_recall": 19.2,
+      "mean_geo_err_km": 892.0
+    },
+    "M4_NetworkEnriched_HopN": {
+      "count": 120,
+      "top1_acc": 10.0,
+      "top3_recall": 25.0,
+      "mean_geo_err_km": 956.2
+    }
+  }
+}

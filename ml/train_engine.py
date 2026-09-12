@@ -1,166 +1,115 @@
+import sys
+import os
+
+# Add the parent directory to the path so we can import from scripts
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import pandas as pd
 import numpy as np
 import json
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import MinMaxScaler
+import xgboost as xgb
+from sklearn.preprocessing import LabelEncoder
+from scripts.data_prep.feature_engineering import get_engineered_data
 
 print("================================================================")
-print("  TRINETRA PREDICTION ENGINE - MULTI-FEATURE MODEL TRAINING     ")
+print("  TRINETRA PREDICTION ENGINE - MULTI-MODEL TRAINING (NO LEAKAGE) ")
 print("================================================================")
 
-# 1. Datasets Load Karo
-zones = pd.read_csv("zones.csv")
-accounts = pd.read_csv("accounts.csv")
-complaints = pd.read_csv("complaints.csv")
-hops = pd.read_csv("hops.csv")
-cashouts = pd.read_csv("cashout_events.csv")
-typology_rules = pd.read_csv("typology_rules.csv")
-mule_entities = pd.read_csv("mule_entities.csv")
+# 1. Load STRICTLY Train Data
+c_feat, h_feat, targets = get_engineered_data("train", "../data/generated/splits")
+zones_df = pd.read_csv("../data/generated/full/zones.csv")
+accounts_df = pd.read_csv("../data/generated/full/accounts.csv")
 
-# -------------------------------------------------------------------------
-# MODULE 1 TRAINING: Cosine Similarity + Multi-Feature Profiling (Typology, Amount, Velocity, Frequency)
-# -------------------------------------------------------------------------
-print("\n[Module 1] Training Reference-Class Prior Matcher...")
+print(f"Loaded {len(c_feat)} training cases and {len(h_feat)} training hops.")
 
-# A. Typology Cosine Vectorizer
-vectorizer = TfidfVectorizer()
-typology_tfidf = vectorizer.fit_transform(typology_rules['name'].tolist())
+# Merge target zone onto cases and hops
+c_full = c_feat.merge(targets, on='complaint_id')
+h_full = h_feat.merge(targets, on='complaint_id')
 
-# B. Historical Typology Statistical Baseline Learning (Amount, Velocity & Hop Frequency)
-typology_profiles = {}
+zone_list = list(zones_df['zone_id'])
 
-for _, rule in typology_rules.iterrows():
-    t_id = rule['typology_id']
-    t_name = rule['name']
-    
-    # Filter historical complaints matching this typology
-    matched_cmps = complaints[complaints['typology_id'] == t_id]
-    
-    if not matched_cmps.empty:
-        cmp_ids = matched_cmps['complaint_id'].tolist()
-        matched_hops = hops[hops['complaint_id'].isin(cmp_ids)]
-        
-        avg_amt = float(matched_cmps['amount_inr'].mean())
-        std_amt = float(matched_cmps['amount_inr'].std()) if len(matched_cmps) > 1 else 10000.0
-        avg_velocity = float(matched_hops['delay_minutes'].mean()) if not matched_hops.empty else rule['avg_velocity_mins']
-        avg_hops_count = float(matched_hops.groupby('complaint_id')['hop_sequence'].max().mean()) if not matched_hops.empty else rule['typical_hops']
-    else:
-        avg_amt = 100000.0
-        std_amt = 20000.0
-        avg_velocity = float(rule['avg_velocity_mins'])
-        avg_hops_count = float(rule['typical_hops'])
-        
-    typology_profiles[t_id] = {
-        "typology_name": t_name,
-        "mean_amount": round(avg_amt, 2),
-        "std_amount": round(std_amt, 2),
-        "mean_velocity_mins": round(avg_velocity, 2),
-        "mean_hops_frequency": round(avg_hops_count, 2),
-        "cashout_window_hrs": float(rule['cashout_window_hrs'])
-    }
+# --- MODEL 0: Global Prior P(Zone) ---
+print("\n[Model 0] Training Global Prior...")
+zone_counts = c_full['zone_id'].value_counts().to_dict()
+total_cases = len(c_full)
+global_prior = {z: (zone_counts.get(z, 0) + 1) / (total_cases + len(zone_list)) for z in zone_list}
 
-print(f"  [OK] Generated feature profiles for {len(typology_profiles)} typologies (Amount, Speed, Frequency).")
+# --- MODEL 1: Typology / Reference Class Prior P(Zone | Typology) ---
+print("[Model 1] Training Typology Prior...")
+typology_priors = {}
+for typ in c_full['typology_id'].unique():
+    typ_cases = c_full[c_full['typology_id'] == typ]
+    t_counts = typ_cases['zone_id'].value_counts().to_dict()
+    typology_priors[typ] = {z: (t_counts.get(z, 0) + 1) / (len(typ_cases) + len(zone_list)) for z in zone_list}
 
-# -------------------------------------------------------------------------
-# MODULE 2 TRAINING: Sequential Bayesian Estimator (Hop-by-Hop Transition Likelihood)
-# -------------------------------------------------------------------------
-print("\n[Module 2] Training Sequential Bayesian Estimator...")
+# --- MODEL 2: Feature-Based Classifier (XGBoost) ---
+print("\n[Model 2] Training XGBoost Feature Ranker...")
+# We will train XGBoost to predict the final zone using only T0 (Case) features 
+# + T=Hop1 features to avoid leaking sequence length.
+first_hops = h_full[h_full['hop_sequence'] == 1]
+xgb_df = c_full.merge(first_hops[['complaint_id', 'time_since_incident_mins', 'to_account_historical_flags', 'is_mule', 'amount_retained_ratio']], on='complaint_id', how='left')
+xgb_df.fillna(0, inplace=True)
 
-# A. Global Prior Distribution P(Zone)
-zone_ids = zones['zone_id'].tolist()
-total_cashouts = len(cashouts)
-zone_prior_counts = cashouts['zone_id'].value_counts().to_dict()
+# Encode categorical features
+le_state = LabelEncoder()
+xgb_df['victim_state_encoded'] = le_state.fit_transform(xgb_df['victim_state'])
 
-# Laplace smoothing ke saath baseline zone prior computation P(Z_k)
-priors_p_zone = {
-    z: float((zone_prior_counts.get(z, 0) + 1) / (total_cashouts + len(zone_ids))) 
-    for z in zone_ids
-}
+le_typology = LabelEncoder()
+xgb_df['typology_encoded'] = le_typology.fit_transform(xgb_df['typology_id'])
 
-# B. Likelihood P(Mule_Account | Zone) & Likelihood P(Velocity | Zone)
-# Hops data ko target zone ke saath join karo
-merged_hops = hops.merge(cashouts[['complaint_id', 'zone_id']], on='complaint_id')
+le_target = LabelEncoder()
+y = le_target.fit_transform(xgb_df['zone_id'])
 
+features = ['typology_encoded', 'victim_state_encoded', 'complaint_hour', 'complaint_dayofweek', 'amount_log', 
+            'time_since_incident_mins', 'to_account_historical_flags', 'amount_retained_ratio']
+X = xgb_df[features]
+
+xgb_model = xgb.XGBClassifier(objective='multi:softprob', num_class=len(le_target.classes_), eval_metric='mlogloss', seed=42)
+xgb_model.fit(X, y)
+print("  [OK] XGBoost trained.")
+
+# --- MODEL 3: Sequential Bayesian Estimator ---
+print("\n[Model 3] Training Sequential Bayesian Likelihoods P(Account | Zone)...")
+# Likelihood matrix
 mule_zone_likelihoods = {}
-velocity_zone_distributions = {}
-
-for z_id in zone_ids:
-    zone_hops = merged_hops[merged_hops['zone_id'] == z_id]
-    total_zone_hops = len(zone_hops)
-    
-    # Mule account transition probability matrix
-    acc_counts = zone_hops['to_account'].value_counts().to_dict()
-    mule_zone_likelihoods[z_id] = {
-        acc: float((acc_counts.get(acc, 0) + 0.1) / (total_zone_hops + 1))
-        for acc in accounts['account_id']
+total_hops = len(h_full)
+for z in zone_list:
+    z_hops = h_full[h_full['zone_id'] == z]
+    acc_counts = z_hops['to_account'].value_counts().to_dict()
+    mule_zone_likelihoods[z] = {
+        acc: (acc_counts.get(acc, 0) + 0.1) / (len(z_hops) + 1)
+        for acc in acc_counts.keys()
     }
-    
-    # Velocity distribution P(Hop_Delay | Zone)
-    if not zone_hops.empty:
-        velocity_zone_distributions[z_id] = {
-            "mean_speed": float(zone_hops['delay_minutes'].mean()),
-            "std_speed": float(zone_hops['delay_minutes'].std()) if len(zone_hops) > 1 else 5.0
-        }
-    else:
-        velocity_zone_distributions[z_id] = {"mean_speed": 15.0, "std_speed": 5.0}
 
-print(f"  [OK] Bayesian update matrix mapped for {len(zone_ids)} geographic zones.")
-print(f"  [OK] Hop-by-hop likelihood distributions trained across all mule nodes.")
-
-# -------------------------------------------------------------------------
-# MODULE 3 TRAINING: Entity & Node Risk Weights Matrix
-# -------------------------------------------------------------------------
-print("\n[Module 3] Calculating Risk Registry Weights...")
-
+# --- MODEL 4: Network Enrichment (Risk Registry) ---
+print("\n[Model 4] Generating Node Risk Registry...")
 node_risk_registry = {}
-for _, acc in accounts.iterrows():
-    mule_id = acc['account_id']
-    flag_score = acc['times_flagged'] / 20.0
-    init_risk = acc['initial_risk_score']
-    
-    # Aggregate transaction frequency & total volume handled by account
-    acc_hops = hops[hops['to_account'] == mule_id]
-    tx_freq = len(acc_hops)
-    tx_volume = float(acc_hops['amount_transferred'].sum()) if not acc_hops.empty else 0.0
-    
-    # Composite trained weight
-    composite_risk = min(0.99, (flag_score * 0.4) + (init_risk * 0.4) + min(0.2, tx_freq * 0.02))
-    
-    node_risk_registry[mule_id] = {
-        "risk_score": round(float(composite_risk), 4),
-        "times_flagged": int(acc['times_flagged']),
-        "total_transfers": tx_freq,
-        "total_volume_inr": round(tx_volume, 2)
+for acc in h_full['to_account'].unique():
+    acc_hops = h_full[h_full['to_account'] == acc]
+    # Simple risk score: frequency in training set
+    node_risk_registry[acc] = {
+        "historical_count": len(acc_hops),
+        "risk_weight": min(2.0, 1.0 + (len(acc_hops) * 0.1))
     }
 
-# -------------------------------------------------------------------------
-# SAVE TRAINED ARTIFACTS TO trained_model.json
-# -------------------------------------------------------------------------
+# --- SAVE ARTIFACTS ---
 trained_artifacts = {
-    "model_metadata": {
-        "version": "2.0.0-multi-feature",
-        "trained_date": "2026-09-12",
-        "total_training_complaints": len(complaints),
-        "total_training_hops": len(hops)
+    "global_prior": global_prior,
+    "typology_priors": typology_priors,
+    "mule_zone_likelihoods": mule_zone_likelihoods,
+    "node_risk_registry": node_risk_registry,
+    "encoders": {
+        "state": list(le_state.classes_),
+        "typology": list(le_typology.classes_),
+        "target_zone": list(le_target.classes_)
     },
-    "module_1_cosine_priors": {
-        "vocabulary": list(vectorizer.get_feature_names_out()),
-        "typology_tfidf_matrix": typology_tfidf.toarray().tolist(),
-        "typology_profiles": typology_profiles
-    },
-    "module_2_bayesian_estimator": {
-        "priors_p_zone": priors_p_zone,
-        "mule_zone_likelihoods": mule_zone_likelihoods,
-        "velocity_zone_distributions": velocity_zone_distributions
-    },
-    "module_3_risk_registry": node_risk_registry
+    "xgb_features": features
 }
 
-with open("trained_model.json", "w") as f:
+os.makedirs("ml", exist_ok=True)
+with open("ml/trained_model.json", "w") as f:
     json.dump(trained_artifacts, f, indent=2)
 
-print("\n================================================================")
-print("  [OK] MODEL TRAINING COMPLETE! Trained artifacts saved to:    ")
-print("    --> ml/trained_model.json                                  ")
-print("================================================================")
+xgb_model.save_model("ml/xgboost_model.json")
+
+print("\n  [OK] ALL MODELS TRAINED AND SAVED SAFELY WITHOUT LEAKAGE.")
